@@ -39,9 +39,17 @@ const defaultRespond = (url, form) => {
 	return { status: 404, body: 'not found' }
 }
 
-function setup({ settings = {}, respond = defaultRespond, pendingContent = 'look at this', editMessage = true } = {}) {
+function setup({
+	settings = {},
+	respond = defaultRespond,
+	pendingContent = 'look at this',
+	editMessage = true,
+	sendMessageError,
+	httpResponse = { ok: true, status: 200, body: {} },
+} = {}) {
 	const toasts = []
 	const requests = []
+	const httpRequests = []
 	const clipboard = []
 	const sent = []
 	const deleted = []
@@ -96,6 +104,12 @@ function setup({ settings = {}, respond = defaultRespond, pendingContent = 'look
 	const pending = { c1: pendingContent === null ? {} : { m1: { id: 'm1', state: 'FAILED', content: pendingContent } } }
 	const messageActions = {
 		sendMessage(channelId, message) {
+			if (sendMessageError) {
+				// Like Discord, a failed send leaves a failed copy in the chat.
+				pending[channelId] ??= {}
+				pending[channelId][`n${Object.keys(pending[channelId]).length}`] = { state: 'FAILED', content: message.content }
+				return Promise.reject(sendMessageError)
+			}
 			sent.push([channelId, message])
 			return Promise.resolve()
 		},
@@ -121,6 +135,15 @@ function setup({ settings = {}, respond = defaultRespond, pendingContent = 'look
 			},
 		},
 		commands,
+		{
+			HTTP: {
+				post(request) {
+					httpRequests.push(request)
+					return httpResponse.ok ? Promise.resolve(httpResponse) : Promise.reject(httpResponse)
+				},
+			},
+			post() {},
+		},
 	]
 
 	const valenced = {
@@ -193,7 +216,8 @@ function setup({ settings = {}, respond = defaultRespond, pendingContent = 'look
 		subscribe: () => () => {},
 	}
 	const logger = { log: (...a) => logs.push(a), warn: (...a) => logs.push(a), error: (...a) => logs.push(a) }
-	const api = { cleanup: (...fns) => cleanups.push(...fns), jsonStorage, plugin: {}, unscoped: valenced, logger }
+	const plugin = { manifest: { name: 'Catbox Uploader', version: { nums: [1, 0, 1] } } }
+	const api = { cleanup: (...fns) => cleanups.push(...fns), jsonStorage, plugin, unscoped: valenced, logger }
 	options.start(api)
 
 	const upload = (props = {}) =>
@@ -216,6 +240,7 @@ function setup({ settings = {}, respond = defaultRespond, pendingContent = 'look
 		pending,
 		toasts,
 		requests,
+		httpRequests,
 		clipboard,
 		sent,
 		deleted,
@@ -587,5 +612,59 @@ test('index.json lists every release zip with a matching digest and manifest', (
 		assert.equal(version.size, bytes.length)
 		assert.deepEqual(version.dependencies, manifest.dependencies)
 	}
-	assert.equal(index.plugins['ndb1995.catbox-upload'].channels.latest, '1.0.0')
+	const { version } = JSON.parse(readFileSync(new URL('../plugins/catbox-upload/manifest.json', import.meta.url), 'utf8'))
+	assert.equal(index.plugins['ndb1995.catbox-upload'].channels.latest, version)
+})
+
+test('a failed sendMessage falls back to the REST API and removes the failed copy', async t => {
+	t.mock.timers.enable({ apis: ['setTimeout'] })
+	const env = setup({ sendMessageError: { status: 400, body: { message: 'Invalid Form Body', code: 50035 } } })
+	await runUpload(t, env, env.upload())
+
+	const content = 'look at this\n[video.mp4](https://files.catbox.moe/video.mp4)'
+	assert.deepEqual(env.httpRequests, [{ url: '/channels/c1/messages', body: { content, tts: false } }])
+	assert.deepEqual(Object.values(env.pending.c1), [], 'the failed copy is deleted')
+	assert.equal(env.clipboard.length, 0)
+	assert.deepEqual(
+		{ text: env.toasts.at(-1).text, variant: env.toasts.at(-1).variant },
+		{ text: 'Link sent.', variant: 'success' },
+	)
+})
+
+test('when every send fails, the reason is shown and the link is copied', async t => {
+	t.mock.timers.enable({ apis: ['setTimeout'] })
+	const env = setup({
+		sendMessageError: new Error('boom'),
+		httpResponse: { ok: false, status: 403, body: { message: 'Missing Permissions', code: 50013 } },
+	})
+	await runUpload(t, env, env.upload())
+
+	assert.deepEqual(env.clipboard, ['look at this\n[video.mp4](https://files.catbox.moe/video.mp4)'])
+	const last = env.toasts.at(-1)
+	assert.equal(last.variant, 'critical')
+	assert.equal(
+		last.text,
+		"Couldn't send the link, copied to clipboard instead. sendMessage: boom; REST: HTTP 403 Missing Permissions (code 50013)",
+	)
+})
+
+test('the debug log can be copied from the settings page', async t => {
+	t.mock.timers.enable({ apis: ['setTimeout'] })
+	const env = setup({ sendMessageError: new Error('boom') })
+	await runUpload(t, env, env.upload())
+
+	const page = env.options.SettingsComponent({ api: env.api })
+	const [row] = findAll(page, node => node.type === 'TableRow' && node.props.label === 'Copy debug log')
+	assert.ok(row, 'the Diagnostics row is rendered')
+	row.props.onPress()
+
+	const copied = env.clipboard.at(-1).split('\n')
+	assert.equal(copied[0], 'Catbox Uploader 1.0.1')
+	const log = copied.slice(1).join('\n')
+	assert.match(log, /LOG Hooked CloudUpload/)
+	assert.match(log, /LOG Hooked sendMessage, module keys: sendMessage,editMessage/)
+	assert.match(log, /LOG Uploaded video\.mp4 \(50 MB\): https:\/\/files\.catbox\.moe\/video\.mp4/)
+	assert.match(log, /ERROR sendMessage failed, trying the REST API\. Module keys: sendMessage,editMessage boom/)
+	assert.match(log, /LOG Sent the link through the REST API/)
+	assert.equal(env.toasts.at(-1).text, 'Debug log copied')
 })

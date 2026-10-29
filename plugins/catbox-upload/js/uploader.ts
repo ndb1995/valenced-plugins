@@ -83,6 +83,7 @@ export function patchUploader(cleanup: Cleanup) {
 					},
 				),
 			)
+			log.log('Hooked CloudUpload')
 		}),
 	)
 }
@@ -91,6 +92,7 @@ export function patchMessageSender(cleanup: Cleanup) {
 	cleanup(
 		getModules(withProps('sendMessage', 'editMessage'), mod => {
 			MessageActions = mod
+			log.log('Hooked sendMessage, module keys:', moduleKeys(mod))
 			cleanup(
 				before(mod, 'sendMessage', args => {
 					const [channelId, message] = args
@@ -192,8 +194,10 @@ async function runJob(upload: any, job: Job): Promise<null> {
 		return null
 	}
 
-	if (link) batch.links.push(formatLink(job.file.name, link, settings.maskedLinks))
-	else {
+	if (link) {
+		log.log(`Uploaded ${job.file.name} (${formatBytes(job.size)}): ${link}`)
+		batch.links.push(formatLink(job.file.name, link, settings.maskedLinks))
+	} else {
 		batch.failed++
 		batch.lastError = lastError ?? 'no host available'
 	}
@@ -241,8 +245,8 @@ function flush(channelId: string) {
 	const text = [takeFailedMessageText(channelId), ...batch.links].filter(Boolean).join('\n')
 	const failedNote = batch.failed ? ` ${batch.failed} file(s) failed: ${batch.lastError}` : ''
 	deliver(channelId, text, readSettings().afterUpload, batch.links.length > 1).then(
-		outcome =>
-			toast('catbox-upload-result', `${outcome}${failedNote}`, failedNote ? 'critical' : 'success'),
+		({ message, ok }) =>
+			toast('catbox-upload-result', `${message}${failedNote}`, ok && !failedNote ? 'success' : 'critical'),
 		e => {
 			log.error('Could not deliver the upload link', text, e)
 			toast(
@@ -256,54 +260,86 @@ function flush(channelId: string) {
 
 /** Deletes Discord's failed copies of the message and returns their text to go with the links. */
 function takeFailedMessageText(channelId: string) {
+	return deleteFailedMessages(channelId, () => true).join('\n')
+}
+
+/** Deletes failed pending messages that match, and returns their distinct non-empty contents. */
+function deleteFailedMessages(channelId: string, matches: (content: string) => boolean) {
 	const contents: string[] = []
 	try {
 		const PendingMessages = lookupModule(
 			withProps('getPendingMessages', 'deletePendingMessage'),
 		)[0] as any
 		const pending = PendingMessages?.getPendingMessages?.(channelId)
-		if (!pending) return ''
+		if (!pending) return contents
 
 		const entries: Iterable<[string, any]> = pending instanceof Map ? pending : Object.entries(pending)
 		for (const [id, message] of entries) {
 			if (message?.state !== 'FAILED') continue
 			const content = typeof message.content === 'string' ? message.content.trim() : ''
+			if (!matches(content)) continue
 			if (content && !contents.includes(content)) contents.push(content)
 			PendingMessages.deletePendingMessage(channelId, id)
 		}
 	} catch (e) {
 		log.warn('Could not clean up failed messages', e)
 	}
-	return contents.join('\n')
+	return contents
 }
 
-async function deliver(channelId: string, text: string, mode: Settings['afterUpload'], plural: boolean) {
+interface Delivery {
+	message: string
+	ok: boolean
+}
+
+async function deliver(
+	channelId: string,
+	text: string,
+	mode: Settings['afterUpload'],
+	plural: boolean,
+): Promise<Delivery> {
 	const noun = plural ? 'Links' : 'Link'
 
 	if (mode === 'copy') {
 		Clipboard.setString(text)
-		return `${noun} copied to clipboard.`
+		return { message: `${noun} copied to clipboard.`, ok: true }
 	}
 
 	if (mode === 'insert') {
 		// Without the sendMessage hook the queued link would never be added.
 		if (!MessageActions) {
 			Clipboard.setString(text)
-			return `Couldn't hook message sending, ${noun.toLowerCase()} copied to clipboard instead.`
+			return {
+				message: `Couldn't hook message sending, ${noun.toLowerCase()} copied to clipboard instead.`,
+				ok: false,
+			}
 		}
 		const queued = queuedInserts.get(channelId)
 		queuedInserts.set(channelId, queued ? `${queued}\n${text}` : text)
-		return `${noun} will be added to your next message.`
+		return { message: `${noun} will be added to your next message.`, ok: true }
 	}
+
+	const chunks = chunkLines(text, MAX_MESSAGE_LENGTH)
+	for (let i = 0; i < chunks.length; i++) {
+		const problem = await sendChunk(channelId, chunks[i]!)
+		if (problem) {
+			Clipboard.setString(chunks.slice(i).join('\n'))
+			return {
+				message: `Couldn't send the ${noun.toLowerCase()}, copied to clipboard instead. ${problem}`,
+				ok: false,
+			}
+		}
+	}
+	return { message: `${noun} sent.`, ok: true }
+}
+
+/** Sends through Discord's message actions, then its REST client. Returns what went wrong, if anything. */
+async function sendChunk(channelId: string, content: string): Promise<string | undefined> {
+	const problems: string[] = []
 
 	const actions = getMessageActions()
-	if (typeof actions?.sendMessage !== 'function') {
-		Clipboard.setString(text)
-		return `Couldn't send the ${noun.toLowerCase()}, copied to clipboard instead.`
-	}
-
-	try {
-		for (const content of chunkLines(text, MAX_MESSAGE_LENGTH)) {
+	if (typeof actions?.sendMessage === 'function') {
+		try {
 			let result: unknown
 			sendingOwnMessage = true
 			try {
@@ -317,13 +353,29 @@ async function deliver(channelId: string, text: string, mode: Settings['afterUpl
 				sendingOwnMessage = false
 			}
 			await result
+			return
+		} catch (e) {
+			problems.push(`sendMessage: ${errorMessage(e)}`)
+			log.error('sendMessage failed, trying the REST API. Module keys:', moduleKeys(actions), e)
 		}
-		return `${noun} sent.`
-	} catch (e) {
-		log.error('Sending the link failed', e)
-		Clipboard.setString(text)
-		return `Couldn't send the ${noun.toLowerCase()}, copied to clipboard instead.`
-	}
+	} else problems.push('sendMessage: module not found')
+
+	const http = getHttp()
+	if (typeof http?.post === 'function') {
+		try {
+			const response = await http.post({ url: `/channels/${channelId}/messages`, body: { content, tts: false } })
+			if (response?.ok === false) throw response
+			// A rejected sendMessage leaves a failed copy in the chat next to the real message.
+			deleteFailedMessages(channelId, failed => failed === content.trim())
+			log.log('Sent the link through the REST API')
+			return
+		} catch (e) {
+			problems.push(`REST: ${errorMessage(e)}`)
+			log.error('REST send failed', e)
+		}
+	} else problems.push('REST: HTTP client not found')
+
+	return problems.join('; ')
 }
 
 function getMessageActions() {
@@ -332,6 +384,20 @@ function getMessageActions() {
 		lookupModule(withProps('sendMessage', 'editMessage'))[0] ??
 		lookupModule(withProps('sendMessage'))[0]
 	)
+}
+
+// ../discord_common/js/packages/http-utils/HTTPUtils.tsx, the same module Valenced's no-track plugin patches.
+function getHttp() {
+	const HTTPUtils = lookupModule(withProps('HTTP', 'post'))[0] as any
+	return HTTPUtils?.HTTP ?? HTTPUtils
+}
+
+function moduleKeys(mod: unknown) {
+	try {
+		return Object.keys(mod as object).slice(0, 25).join(',')
+	} catch {
+		return '?'
+	}
 }
 
 function selectedChannelId(): string | undefined {

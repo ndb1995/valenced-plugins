@@ -5,13 +5,26 @@
 	"plugins": {
 		"ndb1995.catbox-upload": {
 			"channels": {
-				"latest": "1.0.0"
+				"latest": "1.0.1"
 			},
 			"versions": {
 				"1.0.0": {
 					"url": "https://raw.githubusercontent.com/ndb1995/valenced-plugins/main/release/ndb1995.catbox-upload%401.0.0.zip",
 					"sha256": "8dbcc2f117303c70f3499777ddff50e0461a47ce586bd43b8338008d6f539628",
 					"size": 8745,
+					"dependencies": {
+						"valenced.api": {
+							"version": ">=1 <2"
+						},
+						"discord": {
+							"version": "*"
+						}
+					}
+				},
+				"1.0.1": {
+					"url": "https://raw.githubusercontent.com/ndb1995/valenced-plugins/main/release/ndb1995.catbox-upload%401.0.1.zip",
+					"sha256": "95a64d0f7bad45344a312a6de8faf08dad13c1caae383e903e1a0682c3d34a8b",
+					"size": 9920,
 					"dependencies": {
 						"valenced.api": {
 							"version": ">=1 <2"

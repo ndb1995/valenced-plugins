@@ -8,10 +8,38 @@ export interface Log {
 	error(...args: unknown[]): void
 }
 
-export let log: Log = console
+const MAX_LOG_ENTRIES = 50
+const logEntries: string[] = []
+let logSink: Log = console
+
+// Keeps recent lines in memory so they can be copied from the settings page without logcat.
+function record(level: keyof Log, args: unknown[]) {
+	const time = new Date().toISOString().slice(11, 19)
+	logEntries.push(`${time} ${level.toUpperCase()} ${args.map(describe).join(' ')}`)
+	if (logEntries.length > MAX_LOG_ENTRIES) logEntries.shift()
+	try {
+		logSink[level](...args)
+	} catch {}
+}
+
+export const log: Log = {
+	log: (...args) => record('log', args),
+	warn: (...args) => record('warn', args),
+	error: (...args) => record('error', args),
+}
 
 export function setLog(value: Log | undefined) {
-	log = value ?? console
+	logSink = value ?? console
+}
+
+export function getLogEntries(): string[] {
+	return logEntries.slice()
+}
+
+function describe(value: unknown): string {
+	if (typeof value === 'string') return value
+	if (value instanceof Error || (value && typeof value === 'object')) return errorMessage(value)
+	return String(value)
 }
 
 export type ToastVariant = 'default' | 'success' | 'critical'
@@ -52,7 +80,18 @@ export function parseHours(input: unknown): number | undefined {
 }
 
 export function errorMessage(e: unknown): string {
-	return e instanceof Error ? e.message : String(e)
+	if (e instanceof Error) return e.message || e.name
+	if (e && typeof e === 'object') {
+		// Discord's HTTP client rejects with the response: { status, body: { message, code } }.
+		const { status, body, message } = e as any
+		const detail = body?.message ?? message
+		if (status || detail)
+			return [status && `HTTP ${status}`, detail, body?.code && `(code ${body.code})`].filter(Boolean).join(' ')
+		try {
+			return snippet(JSON.stringify(e), 300)
+		} catch {}
+	}
+	return String(e)
 }
 
 /** Makes response bodies (sometimes whole HTML pages) short enough for a toast. */

@@ -1,15 +1,17 @@
 import { Page } from '@valenced/components'
 import { Design } from '@valenced/discord/design'
+import { Clipboard } from '@valenced/externals/react-native-clipboard'
 import type { PluginApi } from '@valenced/plugins/types'
 import { useState } from 'react'
 import { ScrollView } from 'react-native'
 import { normalizeProxyUrl } from './hosts'
 import { type AfterUpload, DEFAULTS, type Host, type LitterboxTime, type Settings } from './settings'
+import { getLogEntries, toast } from './utils'
 
 type Api = PluginApi<{ jsonStorage: Settings }>
 
 export default function SettingsPage({ api }: { api: Api }) {
-	const { Stack, TableRadioGroup, TableRadioRow, TableRowGroup, TableSwitchRow } = Design
+	const { Stack, TableRadioGroup, TableRadioRow, TableRow, TableRowGroup, TableSwitchRow } = Design
 	const settings = { ...DEFAULTS, ...api.jsonStorage.use() }
 	const save = (value: Partial<Settings>) => {
 		void api.jsonStorage.set(value)
@@ -107,6 +109,14 @@ export default function SettingsPage({ api }: { api: Api }) {
 							onSave={proxyUrl => save({ proxyUrl })}
 						/>
 					</Stack>
+
+					<TableRowGroup title="Diagnostics">
+						<TableRow
+							label="Copy debug log"
+							subLabel={getLogEntries().slice(-1)[0] ?? 'Nothing logged yet'}
+							onPress={() => copyDebugLog(api)}
+						/>
+					</TableRowGroup>
 				</Stack>
 			</ScrollView>
 		</Page>
@@ -144,4 +154,11 @@ function SettingTextInput({ value, normalize, onSave, ...props }: SettingTextInp
 			}}
 		/>
 	)
+}
+
+function copyDebugLog(api: Api) {
+	const { manifest } = api.plugin
+	const header = `${manifest.name} ${manifest.version.nums.join('.')}${manifest.version.label ? `-${manifest.version.label}` : ''}`
+	Clipboard.setString([header, ...getLogEntries()].join('\n'))
+	toast('catbox-upload-log', 'Debug log copied', 'success')
 }

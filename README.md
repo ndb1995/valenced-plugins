@@ -24,7 +24,7 @@ Add this repository in Valenced, so it can install the plugin and offer updates:
 
 3. Install and enable **Catbox Uploader**. Its settings appear under the Valenced section of Discord's settings.
 
-Or install it by hand: download [`release/ndb1995.catbox-upload@1.0.0.zip`](release/ndb1995.catbox-upload@1.0.0.zip)
+Or install it by hand: download [`release/ndb1995.catbox-upload@1.0.1.zip`](release/ndb1995.catbox-upload@1.0.1.zip)
 and pick it under **Settings > Valenced > Plugins > Advanced > Install from file**.
 
 ### How it works
@@ -61,11 +61,15 @@ in the settings if it causes trouble.
 | Proxy URL | Empty | Advanced. Sends uploads through a proxy server, for networks that block catbox. Uses the same `/direct` protocol as the original plugin. |
 | Rewrite links through proxy | Off | Advanced. Links point at the proxy instead of the host. |
 
+If something goes wrong, open the plugin settings and tap **Diagnostics > Copy debug log**. It copies the
+plugin version and the last 50 log lines, including the reason a link could not be sent.
+
 ### Changes from the Revenge plugin
 
 - Your message text is sent with the link. The original deleted the failed message, text included.
 - Several files in one message produce one link message.
-- Uploads fall back to another host when one fails.
+- Uploads fall back to another host when one fails, and links fall back to Discord's REST API when
+  `sendMessage` fails.
 - Toasts show upload progress.
 - The upload limit setting matches your plan or server boost.
 - One **After uploading** choice replaces three overlapping toggles. The plugin now sends the link by
