@@ -13,9 +13,19 @@ by シグマ siguma.
 
 ### Install
 
-1. Download [`release/ndb1995.catbox-upload@1.0.0.zip`](release/ndb1995.catbox-upload@1.0.0.zip) to your phone.
-2. In Discord, open **Settings > Valenced > Plugins > Advanced > Install from file** and pick the zip.
-3. Enable **Catbox Uploader**. Its settings appear under the Valenced section of Discord's settings.
+Add this repository in Valenced, so it can install the plugin and offer updates:
+
+1. In Discord, open **Settings > Valenced > Plugins > Advanced**.
+2. Paste this URL into **Repository URL** and tap **Add repository**:
+
+   ```
+   https://raw.githubusercontent.com/ndb1995/valenced-plugins/main/index.json
+   ```
+
+3. Install and enable **Catbox Uploader**. Its settings appear under the Valenced section of Discord's settings.
+
+Or install it by hand: download [`release/ndb1995.catbox-upload@1.0.0.zip`](release/ndb1995.catbox-upload@1.0.0.zip)
+and pick it under **Settings > Valenced > Plugins > Advanced > Install from file**.
 
 ### How it works
 
@@ -81,7 +91,7 @@ layout: `plugins/catbox-upload/manifest.json` and the entry point at `plugins/ca
 ```sh
 npm install        # @valenced/types installs from GitHub
 npm run typecheck
-npm run build      # writes plugins/catbox-upload/build/js/index.js and release/<id>@<version>.zip
+npm run build      # writes the plugin script, release/<id>@<version>.zip and index.json
 npm test           # runs the plugin bundle against mocked Discord modules
 ```
 

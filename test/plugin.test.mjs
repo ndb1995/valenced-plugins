@@ -1,8 +1,10 @@
 // Runs the built bundle (npm run build first) against a mocked Valenced and Discord.
 
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { readdirSync, readFileSync } from 'node:fs'
 import { test } from 'node:test'
+import { strFromU8, unzipSync } from 'fflate'
 
 const code = readFileSync(new URL('../plugins/catbox-upload/build/js/index.js', import.meta.url), 'utf8')
 const MiB = 1024 * 1024
@@ -567,4 +569,23 @@ test('the settings page renders and saves changes', () => {
 	// The draft still holds the initial value here, since the useState mock never re-renders.
 	proxy.props.onBlur()
 	assert.deepEqual(env.saved.at(-1), { proxyUrl: 'https://proxy.example' })
+})
+
+test('index.json lists every release zip with a matching digest and manifest', () => {
+	const index = JSON.parse(readFileSync(new URL('../index.json', import.meta.url), 'utf8'))
+	assert.equal(index.format, 1)
+
+	const zips = readdirSync(new URL('../release/', import.meta.url)).filter(name => name.endsWith('.zip'))
+	assert.ok(zips.length > 0)
+	for (const file of zips) {
+		const bytes = readFileSync(new URL(`../release/${file}`, import.meta.url))
+		const manifest = JSON.parse(strFromU8(unzipSync(bytes)['manifest.json']))
+		const version = index.plugins[manifest.id]?.versions[manifest.version]
+		assert.ok(version, `${file} is missing from index.json`)
+		assert.equal(version.url, `https://raw.githubusercontent.com/ndb1995/valenced-plugins/main/release/${encodeURIComponent(file)}`)
+		assert.equal(version.sha256, createHash('sha256').update(bytes).digest('hex'))
+		assert.equal(version.size, bytes.length)
+		assert.deepEqual(version.dependencies, manifest.dependencies)
+	}
+	assert.equal(index.plugins['ndb1995.catbox-upload'].channels.latest, '1.0.0')
 })

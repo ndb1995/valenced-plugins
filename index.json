@@ -1,0 +1,33 @@
+{
+	"format": 1,
+	"name": "ndb1995's Valenced plugins",
+	"description": "Catbox Uploader: send files over the Discord upload limit through catbox.moe, Litterbox or Pomf.",
+	"plugins": {
+		"ndb1995.catbox-upload": {
+			"channels": {
+				"latest": "1.0.0"
+			},
+			"versions": {
+				"1.0.0": {
+					"url": "https://raw.githubusercontent.com/ndb1995/valenced-plugins/main/release/ndb1995.catbox-upload%401.0.0.zip",
+					"sha256": "8dbcc2f117303c70f3499777ddff50e0461a47ce586bd43b8338008d6f539628",
+					"size": 8745,
+					"dependencies": {
+						"valenced.api": {
+							"version": ">=1 <2"
+						},
+						"discord": {
+							"version": "*"
+						}
+					}
+				}
+			},
+			"name": "Catbox Uploader",
+			"description": "Uploads attachments over Discord's size limit to catbox.moe, Litterbox or Pomf and sends the link instead.",
+			"author": "ndb1995 (https://github.com/ndb1995)",
+			"contributors": [
+				"シグマ siguma <737597276339437578>"
+			]
+		}
+	}
+}

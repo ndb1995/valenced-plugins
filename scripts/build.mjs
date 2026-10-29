@@ -4,13 +4,18 @@
 // during preInit, before React and Discord's UI modules exist. Externals are therefore
 // passed in as lazy proxies that only resolve `valenced.*` when a property is read.
 
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { transform } from '@swc/core'
-import { zipSync } from 'fflate'
+import { strFromU8, unzipSync, zipSync } from 'fflate'
 import { rolldown } from 'rolldown'
+
+const REPO_BASE_URL = 'https://raw.githubusercontent.com/ndb1995/valenced-plugins/main'
+const REPO_NAME = "ndb1995's Valenced plugins"
+const REPO_DESCRIPTION = 'Catbox Uploader: send files over the Discord upload limit through catbox.moe, Litterbox or Pomf.'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const pluginDir = join(root, 'plugins/catbox-upload')
@@ -151,3 +156,55 @@ await writeFile(zipPath, zip)
 
 console.log(`Wrote ${relative(root, scriptPath)} (${code.length} bytes)`)
 console.log(`Wrote ${relative(root, zipPath)} (${zip.length} bytes)`)
+
+// 6. Regenerate the repository index from every zip in release/, so users can add the repo by URL.
+const releaseDir = join(root, 'release')
+const plugins = {}
+for (const file of (await readdir(releaseDir)).filter(name => name.endsWith('.zip')).sort()) {
+	const bytes = await readFile(join(releaseDir, file))
+	const zipped = JSON.parse(strFromU8(unzipSync(bytes, { filter: entry => entry.name === 'manifest.json' })['manifest.json']))
+	if (file !== `${zipped.id}@${zipped.version}.zip`) throw new Error(`${file} holds ${zipped.id}@${zipped.version}`)
+
+	const entry = (plugins[zipped.id] ??= { channels: {}, versions: {} })
+	Object.assign(entry, {
+		name: zipped.name,
+		description: zipped.description,
+		author: zipped.author,
+		contributors: zipped.contributors ?? [],
+	})
+	entry.versions[zipped.version] = {
+		url: `${REPO_BASE_URL}/release/${encodeURIComponent(file)}`,
+		sha256: createHash('sha256').update(bytes).digest('hex'),
+		size: bytes.length,
+		// Valenced aborts the install if these differ from the zip's manifest.
+		dependencies: zipped.dependencies ?? {},
+	}
+}
+for (const entry of Object.values(plugins)) {
+	const versions = Object.keys(entry.versions).sort(compareVersions)
+	const stable = versions.filter(version => !version.includes('-'))
+	if (stable.length) entry.channels.latest = stable.at(-1)
+	if (versions.at(-1) !== entry.channels.latest) entry.channels.beta = versions.at(-1)
+}
+
+const index = { format: 1, name: REPO_NAME, description: REPO_DESCRIPTION, plugins }
+await writeFile(join(root, 'index.json'), `${JSON.stringify(index, null, '\t')}\n`)
+console.log(`Wrote index.json (${Object.keys(plugins).length} plugin(s)), add ${REPO_BASE_URL}/index.json in Valenced`)
+
+/** Orders versions like Valenced: numeric segments, then a labeled version before its bare one. */
+function compareVersions(a, b) {
+	const parse = version => {
+		const [nums, label] = version.split('-')
+		return { nums: nums.split('.').map(Number), label }
+	}
+	const left = parse(a)
+	const right = parse(b)
+	for (let i = 0; i < Math.max(left.nums.length, right.nums.length); i++) {
+		const diff = (left.nums[i] ?? 0) - (right.nums[i] ?? 0)
+		if (diff) return diff
+	}
+	if (left.label === right.label) return 0
+	if (left.label === undefined) return 1
+	if (right.label === undefined) return -1
+	return left.label < right.label ? -1 : 1
+}
