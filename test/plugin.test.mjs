@@ -103,7 +103,9 @@ function setup({
 
 	const pending = { c1: pendingContent === null ? {} : { m1: { id: 'm1', state: 'FAILED', content: pendingContent } } }
 	const messageActions = {
-		sendMessage(channelId, message) {
+		sendMessage(channelId, message, _waitForChannel, options) {
+			// Current Discord reads options.nonce without defaulting options.
+			if (options === undefined) throw new TypeError("Cannot read property 'nonce' of undefined")
 			if (sendMessageError) {
 				// Like Discord, a failed send leaves a failed copy in the chat.
 				pending[channelId] ??= {}
@@ -216,7 +218,7 @@ function setup({
 		subscribe: () => () => {},
 	}
 	const logger = { log: (...a) => logs.push(a), warn: (...a) => logs.push(a), error: (...a) => logs.push(a) }
-	const plugin = { manifest: { name: 'Catbox Uploader', version: { nums: [1, 0, 1] } } }
+	const plugin = { manifest: { name: 'Catbox Uploader', version: { nums: [1, 0, 3] } } }
 	const api = { cleanup: (...fns) => cleanups.push(...fns), jsonStorage, plugin, unscoped: valenced, logger }
 	options.start(api)
 
@@ -468,9 +470,9 @@ test('insert mode appends the link to the next message in that channel', async t
 	await runUpload(t, env, env.upload())
 	assert.equal(env.sent.length, 0)
 
-	await env.messageActions.sendMessage('c2', { content: 'elsewhere' })
-	await env.messageActions.sendMessage('c1', { content: 'hi' })
-	await env.messageActions.sendMessage('c1', { content: 'again' })
+	await env.messageActions.sendMessage('c2', { content: 'elsewhere' }, undefined, {})
+	await env.messageActions.sendMessage('c1', { content: 'hi' }, undefined, {})
+	await env.messageActions.sendMessage('c1', { content: 'again' }, undefined, {})
 	assert.deepEqual(env.sent, [
 		['c2', { content: 'elsewhere' }],
 		['c1', { content: 'hi\nhttps://files.catbox.moe/video.mp4' }],
@@ -543,7 +545,7 @@ test('stopping restores every patched method', async t => {
 	assert.equal(env.commands.getBuiltInCommands, env.originalGetBuiltInCommands)
 
 	// Nothing is appended to messages any more.
-	await env.messageActions.sendMessage('c1', { content: 'hi' })
+	await env.messageActions.sendMessage('c1', { content: 'hi' }, undefined, {})
 	assert.deepEqual(env.sent.at(-1), ['c1', { content: 'hi' }])
 })
 
@@ -658,7 +660,7 @@ test('the debug log can be copied from the settings page', async t => {
 	row.props.onPress()
 
 	const copied = env.clipboard.at(-1).split('\n')
-	assert.equal(copied[0], 'Catbox Uploader 1.0.1')
+	assert.equal(copied[0], 'Catbox Uploader 1.0.3')
 	const log = copied.slice(1).join('\n')
 	assert.match(log, /LOG Hooked CloudUpload/)
 	assert.match(log, /LOG Hooked sendMessage, module keys: sendMessage,editMessage/)
@@ -673,4 +675,26 @@ test('settings saved by 1.0.x with maskedLinks still get previewable bare links'
 	const env = setup({ settings: { maskedLinks: true }, pendingContent: null })
 	await runUpload(t, env, env.upload())
 	assert.deepEqual(env.sent, [['c1', sendOptions('https://files.catbox.moe/video.mp4')]])
+})
+
+test('an anonymous "Invalid uploader" from catbox falls back and points at the userhash setting', async t => {
+	t.mock.timers.enable({ apis: ['setTimeout'] })
+	const invalidUploader = (url, form) =>
+		url === CATBOX ? { status: 412, body: 'Invalid uploader' } : defaultRespond(url, form)
+	const env = setup({ respond: invalidUploader, pendingContent: null })
+	await runUpload(t, env, env.upload())
+
+	assert.deepEqual(
+		env.requests.map(r => r.url),
+		[CATBOX, LITTERBOX],
+	)
+	assert.equal(env.sent.length, 1)
+	assert.equal(
+		env.toasts.at(-1).text,
+		'Link sent. Catbox refused the anonymous upload. Add your catbox.moe userhash in the plugin settings to use Catbox.',
+	)
+
+	const withUserhash = setup({ respond: invalidUploader, pendingContent: null, settings: { userhash: 'abc' } })
+	await runUpload(t, withUserhash, withUserhash.upload())
+	assert.equal(withUserhash.toasts.at(-1).text, 'Link sent.')
 })

@@ -24,7 +24,7 @@ Add this repository in Valenced, so it can install the plugin and offer updates:
 
 3. Install and enable **Catbox Uploader**. Its settings appear under the Valenced section of Discord's settings.
 
-Or install it by hand: download [`release/ndb1995.catbox-upload@1.0.2.zip`](release/ndb1995.catbox-upload@1.0.2.zip)
+Or install it by hand: download [`release/ndb1995.catbox-upload@1.0.3.zip`](release/ndb1995.catbox-upload@1.0.3.zip)
 and pick it under **Settings > Valenced > Plugins > Advanced > Install from file**.
 
 ### How it works
@@ -57,12 +57,21 @@ in the settings if it causes trouble.
 | Upload every file | Off | Also reroutes files under your limit. |
 | Try other hosts if one fails | On | |
 | /litterbox command | On | |
-| Catbox userhash | Empty | Optional. Puts Catbox uploads in your catbox.moe account. |
+| Catbox userhash | Empty | Puts Catbox uploads in your catbox.moe account. Needed when Catbox refuses anonymous uploads (see below). |
 | Proxy URL | Empty | Advanced. Sends uploads through a proxy server, for networks that block catbox. Uses the same `/direct` protocol as the original plugin. |
 | Rewrite links through proxy | Off | Advanced. Links point at the proxy instead of the host. |
 
 If something goes wrong, open the plugin settings and tap **Diagnostics > Copy debug log**. It copies the
 plugin version and the last 50 log lines, including the reason a link could not be sent.
+
+### Catbox says "Invalid uploader"
+
+Catbox answers anonymous uploads from some networks with `412 Invalid uploader`. The plugin then falls back
+to Litterbox, whose links expire, and the result toast says so. To use Catbox again:
+
+1. Create a free account at [catbox.moe](https://catbox.moe) and log in.
+2. Open your account page (**Manage Account**) and copy your **userhash**.
+3. Paste it into **Catbox userhash** in the plugin settings.
 
 ### Changes from the Revenge plugin
 

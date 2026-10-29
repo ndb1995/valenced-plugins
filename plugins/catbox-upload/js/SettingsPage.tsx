@@ -96,7 +96,7 @@ export default function SettingsPage({ api }: { api: Api }) {
 
 					<SettingTextInput
 						label="Catbox userhash"
-						placeholder="Optional: links uploads to your catbox.moe account"
+						placeholder="Needed if Catbox says Invalid uploader"
 						secureTextEntry
 						value={settings.userhash}
 						normalize={text => text.trim()}

@@ -5,7 +5,7 @@
 	"description": "Uploads attachments over Discord's size limit to catbox.moe, Litterbox or Pomf and sends the link instead.",
 	"author": "ndb1995 (https://github.com/ndb1995)",
 	"contributors": ["シグマ siguma <737597276339437578>"],
-	"version": "1.0.2",
+	"version": "1.0.3",
 	"dependencies": {
 		"valenced.api": {
 			"version": ">=1 <2"

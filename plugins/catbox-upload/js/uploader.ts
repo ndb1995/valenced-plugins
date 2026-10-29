@@ -20,6 +20,7 @@ interface Batch {
 	links: string[]
 	failed: number
 	lastError?: string
+	hint?: string
 	override?: UploadOverride
 	timer?: ReturnType<typeof setTimeout>
 }
@@ -35,6 +36,8 @@ interface Job {
 }
 
 const FLUSH_DELAY = 750
+const CATBOX_USERHASH_HINT =
+	'Catbox refused the anonymous upload. Add your catbox.moe userhash in the plugin settings to use Catbox.'
 const MAX_MESSAGE_LENGTH = 2000
 
 // One batch per channel, so several files attached to one message become one link message.
@@ -179,6 +182,9 @@ async function runJob(upload: any, job: Job): Promise<null> {
 		} catch (e) {
 			lastError = `${HOSTS[host].name}: ${errorMessage(e)}`
 			log.warn(`Upload of ${job.file.name} to ${HOSTS[host].name} failed`, e)
+			// Catbox answers anonymous uploads from some networks with "412 Invalid uploader".
+			if (host === 'catbox' && /invalid uploader/i.test(errorMessage(e)) && !settings.userhash.trim())
+				batch.hint = CATBOX_USERHASH_HINT
 		}
 	}
 
@@ -236,9 +242,11 @@ function flush(channelId: string) {
 	if (!batch || batch.pending > 0) return
 	batches.delete(channelId)
 
+	const hint = batch.hint ? ` ${batch.hint}` : ''
+
 	// Nothing uploaded: keep Discord's failed message so the user still has their text.
 	if (!batch.links.length) {
-		toast('catbox-upload-result', `Upload failed: ${batch.lastError ?? 'unknown error'}`, 'critical')
+		toast('catbox-upload-result', `Upload failed: ${batch.lastError ?? 'unknown error'}${hint}`, 'critical')
 		return
 	}
 
@@ -246,7 +254,11 @@ function flush(channelId: string) {
 	const failedNote = batch.failed ? ` ${batch.failed} file(s) failed: ${batch.lastError}` : ''
 	deliver(channelId, text, readSettings().afterUpload, batch.links.length > 1).then(
 		({ message, ok }) =>
-			toast('catbox-upload-result', `${message}${failedNote}`, ok && !failedNote ? 'success' : 'critical'),
+			toast(
+				'catbox-upload-result',
+				`${message}${failedNote}${hint}`,
+				ok && !failedNote ? 'success' : 'critical',
+			),
 		e => {
 			log.error('Could not deliver the upload link', text, e)
 			toast(
@@ -343,12 +355,13 @@ async function sendChunk(channelId: string, content: string): Promise<string | u
 			let result: unknown
 			sendingOwnMessage = true
 			try {
-				result = actions.sendMessage(channelId, {
-					content,
-					tts: false,
-					invalidEmojis: [],
-					validNonShortcutEmojis: [],
-				})
+				// Current Discord reads options.nonce without defaulting options, so pass an empty object.
+				result = actions.sendMessage(
+					channelId,
+					{ content, tts: false, invalidEmojis: [], validNonShortcutEmojis: [] },
+					undefined,
+					{},
+				)
 			} finally {
 				sendingOwnMessage = false
 			}
