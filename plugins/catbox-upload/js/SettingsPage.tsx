@@ -5,7 +5,14 @@ import type { PluginApi } from '@valenced/plugins/types'
 import { useState } from 'react'
 import { ScrollView } from 'react-native'
 import { normalizeProxyUrl } from './hosts'
-import { type AfterUpload, DEFAULTS, type Host, type LitterboxTime, type Settings } from './settings'
+import {
+	type AfterUpload,
+	DEFAULTS,
+	type Host,
+	type LinkStyle,
+	type LitterboxTime,
+	type Settings,
+} from './settings'
 import { getLogEntries, toast } from './utils'
 
 type Api = PluginApi<{ jsonStorage: Settings }>
@@ -59,6 +66,15 @@ export default function SettingsPage({ api }: { api: Api }) {
 						<TableRadioRow label="Copy the link" value="copy" />
 					</TableRadioGroup>
 
+					<TableRadioGroup
+						title="Link style"
+						value={settings.linkStyle}
+						onChange={(linkStyle: LinkStyle) => save({ linkStyle })}
+					>
+						<TableRadioRow label="Preview" subLabel="Plain link, Discord shows the video or image" value="preview" />
+						<TableRadioRow label="File name" subLabel="The file name as the link, with no preview" value="name" />
+					</TableRadioGroup>
+
 					<TableRowGroup title="Options">
 						<TableSwitchRow
 							label="Upload every file"
@@ -70,11 +86,6 @@ export default function SettingsPage({ api }: { api: Api }) {
 							label="Try other hosts if one fails"
 							value={settings.fallback}
 							onValueChange={fallback => save({ fallback })}
-						/>
-						<TableSwitchRow
-							label="Show file name instead of URL"
-							value={settings.maskedLinks}
-							onValueChange={maskedLinks => save({ maskedLinks })}
 						/>
 						<TableSwitchRow
 							label="/litterbox command"

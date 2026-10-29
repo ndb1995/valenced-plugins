@@ -3,6 +3,8 @@ import type { JsonStorage } from '@valenced/json-storage'
 export type Host = 'catbox' | 'litterbox' | 'pomf'
 export type LitterboxTime = '1h' | '12h' | '24h' | '72h'
 export type AfterUpload = 'send' | 'insert' | 'copy'
+/** `preview` sends the bare URL so Discord embeds the file. Discord never embeds masked links. */
+export type LinkStyle = 'preview' | 'name'
 
 export type Settings = {
 	host: Host
@@ -11,7 +13,7 @@ export type Settings = {
 	alwaysUpload: boolean
 	fallback: boolean
 	afterUpload: AfterUpload
-	maskedLinks: boolean
+	linkStyle: LinkStyle
 	userhash: string
 	command: boolean
 	proxyUrl: string
@@ -25,7 +27,7 @@ export const DEFAULTS: Settings = {
 	alwaysUpload: false,
 	fallback: true,
 	afterUpload: 'send',
-	maskedLinks: true,
+	linkStyle: 'preview',
 	userhash: '',
 	command: true,
 	proxyUrl: '',

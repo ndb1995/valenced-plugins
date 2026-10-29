@@ -24,7 +24,7 @@ Add this repository in Valenced, so it can install the plugin and offer updates:
 
 3. Install and enable **Catbox Uploader**. Its settings appear under the Valenced section of Discord's settings.
 
-Or install it by hand: download [`release/ndb1995.catbox-upload@1.0.1.zip`](release/ndb1995.catbox-upload@1.0.1.zip)
+Or install it by hand: download [`release/ndb1995.catbox-upload@1.0.2.zip`](release/ndb1995.catbox-upload@1.0.2.zip)
 and pick it under **Settings > Valenced > Plugins > Advanced > Install from file**.
 
 ### How it works
@@ -53,9 +53,9 @@ in the settings if it causes trouble.
 | Litterbox expiry | 3 days | Used when a file goes to Litterbox. |
 | Your Discord upload limit | 10 MB | Free 10 MB, Nitro Basic or Level 2 server 50 MB, Level 3 server 100 MB, Nitro 500 MB. |
 | After uploading | Send the link in chat | Or add it to your next message, or copy it. |
+| Link style | Preview | Preview sends the plain link, so Discord shows the video or image inline. File name sends `[video.mp4](https://…)`, which Discord never previews. |
 | Upload every file | Off | Also reroutes files under your limit. |
 | Try other hosts if one fails | On | |
-| Show file name instead of URL | On | Sends `[video.mp4](https://…)` instead of the bare URL. |
 | /litterbox command | On | |
 | Catbox userhash | Empty | Optional. Puts Catbox uploads in your catbox.moe account. |
 | Proxy URL | Empty | Advanced. Sends uploads through a proxy server, for networks that block catbox. Uses the same `/direct` protocol as the original plugin. |

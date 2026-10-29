@@ -196,7 +196,7 @@ async function runJob(upload: any, job: Job): Promise<null> {
 
 	if (link) {
 		log.log(`Uploaded ${job.file.name} (${formatBytes(job.size)}): ${link}`)
-		batch.links.push(formatLink(job.file.name, link, settings.maskedLinks))
+		batch.links.push(formatLink(job.file.name, link, settings.linkStyle === 'name'))
 	} else {
 		batch.failed++
 		batch.lastError = lastError ?? 'no host available'

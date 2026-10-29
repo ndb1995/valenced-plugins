@@ -325,7 +325,7 @@ test('a 50 MB file is uploaded to catbox and the link is sent with the caption',
 	await settle()
 
 	assert.deepEqual(env.deleted, [['c1', 'm1']])
-	assert.deepEqual(env.sent, [['c1', sendOptions('look at this\n[video.mp4](https://files.catbox.moe/video.mp4)')]])
+	assert.deepEqual(env.sent, [['c1', sendOptions('look at this\nhttps://files.catbox.moe/video.mp4')]])
 	assert.equal(env.toasts.at(-1).variant, 'success')
 })
 
@@ -349,7 +349,7 @@ test('a catbox error falls back to litterbox', async t => {
 	)
 	assert.equal(env.requests[1].fields.time, '72h')
 	assert.equal(env.requests[1].fields.reqtype, 'fileupload')
-	assert.deepEqual(env.sent, [['c1', sendOptions('look at this\n[video.mp4](https://litter.catbox.moe/video.mp4)')]])
+	assert.deepEqual(env.sent, [['c1', sendOptions('look at this\nhttps://litter.catbox.moe/video.mp4')]])
 })
 
 test('without fallback a failed upload keeps the failed message', async t => {
@@ -397,7 +397,7 @@ test('files too big for every host go to Discord with a warning', t => {
 
 test('pomf uploads use files[] and read the JSON response', async t => {
 	t.mock.timers.enable({ apis: ['setTimeout'] })
-	const env = setup({ settings: { host: 'pomf', maskedLinks: false } })
+	const env = setup({ settings: { host: 'pomf' } })
 	await runUpload(t, env, env.upload())
 	assert.equal(env.requests[0].url, POMF)
 	assert.deepEqual(
@@ -423,12 +423,12 @@ test('the proxy receives the destination and links can be rewritten', async t =>
 	assert.equal(fields.time, '72h')
 	assert.equal(fields.userhash, 'hash')
 	assert.equal(fields.file.name, 'video.mp4')
-	assert.deepEqual(env.sent, [['c1', sendOptions('look at this\n[video.mp4](https://proxy.example/catbox/abc.mp4)')]])
+	assert.deepEqual(env.sent, [['c1', sendOptions('look at this\nhttps://proxy.example/catbox/abc.mp4')]])
 })
 
 test('several files in one message become one link message', async t => {
 	t.mock.timers.enable({ apis: ['setTimeout'] })
-	const env = setup()
+	const env = setup({ settings: { linkStyle: 'name' } })
 	await runUpload(t, env, env.upload({ filename: 'a [1].mp4' }), env.upload({ filename: 'b.mp4' }))
 
 	assert.equal(env.requests.length, 2)
@@ -450,7 +450,7 @@ test('long link messages are split into 2000-character chunks', async t => {
 	await runUpload(t, env, env.upload())
 	assert.equal(env.sent.length, 2)
 	assert.equal(env.sent[0][1].content, `${line}\n${line}`)
-	assert.equal(env.sent[1][1].content, `${line}\n[video.mp4](https://files.catbox.moe/video.mp4)`)
+	assert.equal(env.sent[1][1].content, `${line}\nhttps://files.catbox.moe/video.mp4`)
 	assert.ok(env.sent.every(([, message]) => message.content.length <= 2000))
 })
 
@@ -458,7 +458,7 @@ test('copy mode copies the link instead of sending it', async t => {
 	t.mock.timers.enable({ apis: ['setTimeout'] })
 	const env = setup({ settings: { afterUpload: 'copy' } })
 	await runUpload(t, env, env.upload())
-	assert.deepEqual(env.clipboard, ['look at this\n[video.mp4](https://files.catbox.moe/video.mp4)'])
+	assert.deepEqual(env.clipboard, ['look at this\nhttps://files.catbox.moe/video.mp4'])
 	assert.equal(env.sent.length, 0)
 })
 
@@ -473,7 +473,7 @@ test('insert mode appends the link to the next message in that channel', async t
 	await env.messageActions.sendMessage('c1', { content: 'again' })
 	assert.deepEqual(env.sent, [
 		['c2', { content: 'elsewhere' }],
-		['c1', { content: 'hi\n[video.mp4](https://files.catbox.moe/video.mp4)' }],
+		['c1', { content: 'hi\nhttps://files.catbox.moe/video.mp4' }],
 		['c1', { content: 'again' }],
 	])
 })
@@ -482,7 +482,7 @@ test('insert mode copies the link when sendMessage could not be hooked', async t
 	t.mock.timers.enable({ apis: ['setTimeout'] })
 	const env = setup({ settings: { afterUpload: 'insert' }, pendingContent: null, editMessage: false })
 	await runUpload(t, env, env.upload())
-	assert.deepEqual(env.clipboard, ['[video.mp4](https://files.catbox.moe/video.mp4)'])
+	assert.deepEqual(env.clipboard, ['https://files.catbox.moe/video.mp4'])
 	assert.equal(env.sent.length, 0)
 	assert.match(env.toasts.at(-1).text, /copied to clipboard instead/)
 })
@@ -555,7 +555,7 @@ test('the settings page renders and saves changes', () => {
 	const groups = findAll(page, node => node.type === 'TableRadioGroup')
 	assert.deepEqual(
 		groups.map(group => group.props.title),
-		['Upload to', 'Litterbox expiry', 'Your Discord upload limit', 'After uploading'],
+		['Upload to', 'Litterbox expiry', 'Your Discord upload limit', 'After uploading', 'Link style'],
 	)
 	const limit = groups[2]
 	assert.equal(limit.props.value, '50')
@@ -572,7 +572,6 @@ test('the settings page renders and saves changes', () => {
 		[
 			'Upload every file',
 			'Try other hosts if one fails',
-			'Show file name instead of URL',
 			'/litterbox command',
 			'Rewrite links through proxy',
 		],
@@ -621,7 +620,7 @@ test('a failed sendMessage falls back to the REST API and removes the failed cop
 	const env = setup({ sendMessageError: { status: 400, body: { message: 'Invalid Form Body', code: 50035 } } })
 	await runUpload(t, env, env.upload())
 
-	const content = 'look at this\n[video.mp4](https://files.catbox.moe/video.mp4)'
+	const content = 'look at this\nhttps://files.catbox.moe/video.mp4'
 	assert.deepEqual(env.httpRequests, [{ url: '/channels/c1/messages', body: { content, tts: false } }])
 	assert.deepEqual(Object.values(env.pending.c1), [], 'the failed copy is deleted')
 	assert.equal(env.clipboard.length, 0)
@@ -639,7 +638,7 @@ test('when every send fails, the reason is shown and the link is copied', async 
 	})
 	await runUpload(t, env, env.upload())
 
-	assert.deepEqual(env.clipboard, ['look at this\n[video.mp4](https://files.catbox.moe/video.mp4)'])
+	assert.deepEqual(env.clipboard, ['look at this\nhttps://files.catbox.moe/video.mp4'])
 	const last = env.toasts.at(-1)
 	assert.equal(last.variant, 'critical')
 	assert.equal(
@@ -667,4 +666,11 @@ test('the debug log can be copied from the settings page', async t => {
 	assert.match(log, /ERROR sendMessage failed, trying the REST API\. Module keys: sendMessage,editMessage boom/)
 	assert.match(log, /LOG Sent the link through the REST API/)
 	assert.equal(env.toasts.at(-1).text, 'Debug log copied')
+})
+
+test('settings saved by 1.0.x with maskedLinks still get previewable bare links', async t => {
+	t.mock.timers.enable({ apis: ['setTimeout'] })
+	const env = setup({ settings: { maskedLinks: true }, pendingContent: null })
+	await runUpload(t, env, env.upload())
+	assert.deepEqual(env.sent, [['c1', sendOptions('https://files.catbox.moe/video.mp4')]])
 })
